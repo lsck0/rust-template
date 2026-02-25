@@ -1,0 +1,3 @@
+[template]
+exclude = [".github/**", "crates/macros/**"]
+ignore = ["cargo-generate.toml", "TODO.md"]

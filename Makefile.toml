@@ -1,0 +1,206 @@
+[config]
+default_to_workspace = false
+skip_core_tasks = true
+
+[env]
+BINARY_NAME = "{{project-name}}"
+COVERAGE_PERCENT_MIN = "50"
+FUZZ_DURATION_S = "30"
+ACT_RUNNER_IMAGE = "localhost/${BINARY_NAME}-act-runner"
+LGTM_IMAGE = "docker.io/grafana/otel-lgtm:0.39.0@sha256:4c8056c9c05fcb3c8fd93800e85334bfd79b4d0271b47a54a121a64af41fe1fe"
+PERF_DATA_PATH = "target/perf.data"
+PERF_SAMPLE_FREQUENCY_HZ = "999"
+SANITIZER_FLAGS = "-Zsanitizer=address"
+TARGET_TRIPLE = "x86_64-unknown-linux-gnu"
+TEST_THREAD_COUNT = "8"
+
+[tasks.default]
+description = "List every task."
+command = "cargo"
+args = ["make", "--list-all-steps"]
+
+[tasks.run-debug]
+description = "Run unoptimized with AddressSanitizer."
+env = { RUSTFLAGS = "${SANITIZER_FLAGS}" }
+command = "cargo"
+args = ["run", "--target", "${TARGET_TRIPLE}"]
+
+[tasks.run-dev]
+description = "Run optimized, without sanitizers."
+command = "cargo"
+args = ["run", "--profile", "dev-optimized"]
+
+[tasks.run-release]
+description = "Run the release build."
+command = "cargo"
+args = ["run", "--release"]
+
+[tasks.run-observed]
+description = "Run against the local Grafana stack from `cargo make lgtm`."
+env = { OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318", PYROSCOPE_SERVER_ADDRESS = "http://localhost:4040", OTEL_RESOURCE_ATTRIBUTES = "deployment.environment=dev" }
+command = "cargo"
+args = ["run", "--profile", "dev-optimized"]
+
+[tasks.lgtm]
+description = "Serve Grafana, Loki, Tempo, Mimir, Pyroscope and an OTLP collector at http://localhost:3000."
+command = "docker"
+args = [
+    "run",
+    "--rm",
+    "--name",
+    "${BINARY_NAME}-lgtm",
+    "-p",
+    "3000:3000",
+    "-p",
+    "4317:4317",
+    "-p",
+    "4318:4318",
+    "-p",
+    "4040:4040",
+    "${LGTM_IMAGE}",
+]
+
+[tasks.build-debug]
+description = "Build unoptimized with AddressSanitizer."
+env = { RUSTFLAGS = "${SANITIZER_FLAGS}" }
+command = "cargo"
+args = ["build", "--target", "${TARGET_TRIPLE}"]
+
+[tasks.build-dev]
+description = "Build optimized, without sanitizers."
+command = "cargo"
+args = ["build", "--profile", "dev-optimized"]
+
+[tasks.build-release]
+description = "Build the release binary."
+command = "cargo"
+args = ["build", "--release"]
+
+[tasks.check]
+description = "Run every fast gate; CI runs this."
+dependencies = ["fmt-check", "typos", "deny", "clippy", "clippy-features", "doc", "test", "coverage", "build-release"]
+
+[tasks.check-all]
+description = "Run the fast gates plus kani, flux and fuzzing."
+dependencies = ["check", "kani", "flux", "fuzz"]
+
+[tasks.fmt]
+description = "Format all code."
+command = "cargo"
+args = ["fmt", "--all"]
+
+[tasks.fmt-check]
+description = "Fail on unformatted code."
+command = "cargo"
+args = ["fmt", "--all", "--check"]
+
+[tasks.typos]
+description = "Check spelling."
+command = "typos"
+
+[tasks.deny]
+description = "Check advisories, licenses, bans and sources."
+command = "cargo"
+args = ["deny", "check"]
+
+[tasks.clippy]
+description = "Lint every target with warnings as errors."
+command = "cargo"
+args = ["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]
+
+[tasks.clippy-features]
+description = "Lint the telemetry crate with each cargo feature alone and with none."
+script_runner = "@shell"
+script = """
+cargo clippy -p telemetry --all-targets --no-default-features -- -D warnings
+cargo clippy -p telemetry --all-targets --no-default-features --features otlp -- -D warnings
+cargo clippy -p telemetry --all-targets --no-default-features --features profiling -- -D warnings
+"""
+
+[tasks.doc]
+description = "Build the API reference with warnings as errors."
+env = { RUSTDOCFLAGS = "-D warnings" }
+command = "cargo"
+args = ["doc", "--workspace", "--no-deps"]
+
+[tasks.test]
+description = "Run unit, integration, property and doc tests."
+command = "cargo"
+args = ["test", "--workspace", "--", "--test-threads=${TEST_THREAD_COUNT}"]
+
+[tasks.coverage]
+description = "Measure library coverage and fail below the minimum."
+command = "cargo"
+args = [
+    "tarpaulin",
+    "--workspace",
+    "--engine",
+    "llvm",
+    "--out",
+    "xml",
+    "--output-dir",
+    "target/tarpaulin",
+    "--skip-clean",
+    "--exclude-files",
+    "src/build.rs",
+    "--exclude-files",
+    "crates/macros/src/*",
+    "--fail-under",
+    "${COVERAGE_PERCENT_MIN}",
+]
+
+[tasks.ci-local]
+description = "Run the CI workflow's jobs locally with act; pass job ids to run only those, e.g. `cargo make ci-local check`."
+script_runner = "@shell"
+script = """
+set -e
+docker build --quiet --load --file .github/act/runner.Dockerfile --tag "${ACT_RUNNER_IMAGE}" .github/act
+socket="${DOCKER_HOST:-unix:///var/run/docker.sock}"
+run() { act push --workflows .github/workflows/ci.yml --platform "ubuntu-24.04=${ACT_RUNNER_IMAGE}" --pull=false --container-daemon-socket "$socket" "$@"; }
+if [ -z "${1}" ]; then run; else for job in ${@}; do run --job "$job"; done; fi
+"""
+
+[tasks.flux]
+description = "Check the flux refinement types."
+command = "cargo"
+args = ["flux"]
+
+[tasks.kani]
+description = "Run the kani proofs."
+command = "cargo"
+args = ["kani"]
+
+[tasks.fuzz]
+description = "Fuzz every target and minimize crashes into regressions."
+cwd = "tests/fuzz"
+command = "nu"
+args = ["run.nu", "--duration-s", "${FUZZ_DURATION_S}"]
+
+[tasks.bench]
+description = "Run the benchmarks."
+command = "cargo"
+args = ["bench"]
+
+[tasks.profile]
+description = "Record a perf profile of the release binary."
+dependencies = ["build-release"]
+command = "perf"
+args = [
+    "record",
+    "-o",
+    "${PERF_DATA_PATH}",
+    "-T",
+    "-F",
+    "${PERF_SAMPLE_FREQUENCY_HZ}",
+    "-g",
+    "--call-graph",
+    "dwarf",
+    "-e",
+    "cycles,instructions,cache-misses",
+    "./target/release/${BINARY_NAME}",
+]
+
+[tasks.hotspot]
+description = "Open the recorded perf profile in hotspot."
+command = "hotspot"
+args = ["${PERF_DATA_PATH}"]

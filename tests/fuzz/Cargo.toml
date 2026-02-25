@@ -1,0 +1,19 @@
+[workspace]
+members = ["."]
+
+[package]
+name = "fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[dependencies]
+afl = "=0.18.2"
+{{project-name}} = { path = "../.." }
+
+[[bin]]
+name = "sum_digits"
+path = "sum_digits/harness.rs"
+test = false
+doc = false
+bench = false

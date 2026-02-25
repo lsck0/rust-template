@@ -1,0 +1,85 @@
+name: Release
+
+on:
+    push:
+        branches: [master]
+
+concurrency:
+    group: release
+    cancel-in-progress: false
+
+permissions:
+    contents: read
+
+jobs:
+    release:
+        if: vars.RELEASE_ENABLED == 'true'
+        runs-on: ubuntu-24.04
+        permissions:
+            attestations: write
+            contents: write
+            id-token: write
+        steps:
+            - name: Harden runner
+              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              with:
+                  egress-policy: block
+                  allowed-endpoints: >
+                      github.com:443 api.github.com:443 uploads.github.com:443 release-assets.githubusercontent.com:443
+                      objects.githubusercontent.com:443 results-receiver.actions.githubusercontent.com:443
+                      *.actions.githubusercontent.com:443 *.blob.core.windows.net:443 *.githubapp.com:443
+                      static.rust-lang.org:443 index.crates.io:443 static.crates.io:443 azure.archive.ubuntu.com:80
+                      esm.ubuntu.com:443 motd.ubuntu.com:443 packages.microsoft.com:443 fulcio.sigstore.dev:443
+                      rekor.sigstore.dev:443 tuf-repo-cdn.sigstore.dev:443
+
+            - name: Checkout
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            - name: Install rust toolchain
+              run: rustup toolchain install
+
+            - name: Install mold
+              run: sudo apt-get update && sudo apt-get install -y mold
+
+            - name: Install cargo tools
+              uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+              with:
+                  tool: cargo-make@0.37.24,git-cliff@2.14.1
+
+            - name: Compute version
+              id: version
+              run: |
+                  version=$(git cliff --config .github/cliff.toml --bumped-version)
+                  if git rev-parse --verify --quiet "refs/tags/$version" > /dev/null; then
+                    echo "bumped=false" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "bumped=true" >> "$GITHUB_OUTPUT"
+                  fi
+                  echo "version=$version" >> "$GITHUB_OUTPUT"
+
+            - name: Build
+              if: steps.version.outputs.bumped == 'true'
+              env:
+                  VERSION: ${{ steps.version.outputs.version }}
+              run: |
+                  git tag "$VERSION"
+                  cargo make build-release
+                  git cliff --config .github/cliff.toml --latest --strip header --output "$RUNNER_TEMP/notes.md"
+                  binary=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].targets[] | select(.kind[0] == "bin") | .name')
+                  echo "ARTIFACT=target/release/$binary" >> "$GITHUB_ENV"
+
+            - name: Attest provenance
+              if: steps.version.outputs.bumped == 'true'
+              uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+              with:
+                  subject-path: ${{ env.ARTIFACT }}
+
+            - name: Publish
+              if: steps.version.outputs.bumped == 'true'
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  VERSION: ${{ steps.version.outputs.version }}
+              run: gh release create "$VERSION" --target "$GITHUB_SHA" --notes-file "$RUNNER_TEMP/notes.md" "$ARTIFACT"

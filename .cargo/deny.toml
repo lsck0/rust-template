@@ -1,0 +1,47 @@
+[advisories]
+ignore = [
+    { id = "RUSTSEC-2026-0173", reason = "unmaintained proc-macro-error2, pulled in by kani; no safe upgrade yet" },
+]
+
+[sources]
+allow-git = [
+    "https://github.com/flux-rs/flux.git",
+    "https://github.com/model-checking/kani",
+]
+
+[licenses]
+confidence-threshold = 0.93
+unused-allowed-license = "allow"
+allow = [
+    "Apache-2.0 WITH LLVM-exception",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+]
+
+[[licenses.clarify]]
+crate = "flux-rs"
+expression = "MIT"
+license-files = []
+
+[[licenses.clarify]]
+crate = "flux-attrs"
+expression = "MIT"
+license-files = []
+
+[[licenses.clarify]]
+crate = "flux-attrs-impl"
+expression = "MIT"
+license-files = []
+
+[licenses.private]
+ignore = true

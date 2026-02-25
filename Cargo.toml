@@ -1,0 +1,115 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+macros = { path = "crates/macros" }
+telemetry = { path = "crates/telemetry" }
+
+criterion = { version = "=0.8.2", features = ["html_reports"] }
+darling = "=0.23.0"
+opentelemetry = "=0.33.1"
+opentelemetry-appender-tracing = "=0.33.1"
+opentelemetry-otlp = { version = "=0.33.1", default-features = false, features = [
+    "http-proto",
+    "logs",
+    "metrics",
+    "reqwest-blocking-client",
+    "trace",
+] }
+opentelemetry_sdk = "=0.33.1"
+pretty_assertions = "=1.4.1"
+proc-macro2 = "=1.0.106"
+proptest = "=1.11.0"
+pyroscope = { version = "=2.1.5", default-features = false, features = ["backend-pprof-rs"] }
+quote = "=1.0.44"
+rstest = "=0.27.0"
+syn = { version = "=2.0.117", features = ["full"] }
+tracing = "=0.1.44"
+tracing-opentelemetry = "=0.34.0"
+tracing-subscriber = { version = "=0.3.22", features = ["env-filter", "json"] }
+trybuild = "=1.0.122"
+
+kani = { git = "https://github.com/model-checking/kani", rev = "96f7e59a8c8058f3edbdcc4d52940e376d54ff09" }
+flux-rs = { git = "https://github.com/flux-rs/flux.git", rev = "1b04d5e6f8247766cfb0f9c6040c2944eb9c87c4" }
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(flux)'] }
+unsafe_code = "forbid"
+
+[workspace.lints.rustdoc]
+all = "warn"
+
+[workspace.lints.clippy]
+nursery = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+needless_return = "allow"
+unwrap_used = "forbid"
+
+[package]
+name = "{{project-name}}"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+build = "src/build.rs"
+
+[package.metadata]
+flux = { enabled = true, cache = true }
+
+[[bin]]
+name = "{{project-name}}"
+path = "bin/main.rs"
+test = false
+
+[[bench]]
+name = "sum_digits"
+path = "bench/sum_digits.rs"
+harness = false
+
+[profile.release]
+codegen-units = 1
+debug = true
+lto = "fat"
+opt-level = 3
+panic = "abort"
+
+[profile.dev]
+debug = true
+lto = "off"
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev-optimized]
+inherits = "dev"
+opt-level = 3
+
+[dependencies]
+macros.workspace = true
+telemetry.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+pretty_assertions.workspace = true
+proptest.workspace = true
+rstest.workspace = true
+
+[target.'cfg(kani_ra)'.dependencies]
+kani.workspace = true
+
+[target.'cfg(flux)'.dependencies]
+flux-rs.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,226 @@
+name: CI
+
+on:
+    push:
+        branches: [master]
+    pull_request:
+
+concurrency:
+    group: ci-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+
+env:
+    CARGO_TERM_COLOR: always
+
+jobs:
+    check:
+        runs-on: ubuntu-24.04
+        steps:
+            - name: Harden runner
+              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              with:
+                  egress-policy: block
+                  allowed-endpoints: >
+                      github.com:443 api.github.com:443 release-assets.githubusercontent.com:443
+                      objects.githubusercontent.com:443 results-receiver.actions.githubusercontent.com:443
+                      *.blob.core.windows.net:443 *.githubapp.com:443 static.rust-lang.org:443 index.crates.io:443
+                      static.crates.io:443 azure.archive.ubuntu.com:80 esm.ubuntu.com:443 motd.ubuntu.com:443
+                      packages.microsoft.com:443
+
+            - name: Checkout
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+
+            - name: Install rust toolchain
+              run: rustup toolchain install
+
+            - name: Install mold
+              run: sudo apt-get update && sudo apt-get install -y mold
+
+            - name: Install cargo tools
+              uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+              with:
+                  tool: cargo-make@0.37.24,cargo-deny@0.20.2,cargo-tarpaulin@0.37.2,cargo-generate@0.23.9,typos@1.50.1
+
+            - name: Select project directory
+              run: .github/select-project-dir.sh check
+
+            - name: Cache
+              uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+              with:
+                  workspaces: ${{ env.PROJECT_DIR }}
+
+            - run: cargo make check
+              working-directory: ${{ env.PROJECT_DIR }}
+
+    kani:
+        runs-on: ubuntu-24.04
+        steps:
+            - name: Harden runner
+              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              with:
+                  egress-policy: block
+                  allowed-endpoints: >
+                      github.com:443 api.github.com:443 release-assets.githubusercontent.com:443
+                      objects.githubusercontent.com:443 results-receiver.actions.githubusercontent.com:443
+                      *.blob.core.windows.net:443 *.githubapp.com:443 static.rust-lang.org:443 index.crates.io:443
+                      static.crates.io:443 azure.archive.ubuntu.com:80 esm.ubuntu.com:443 motd.ubuntu.com:443
+                      packages.microsoft.com:443
+
+            - name: Checkout
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+
+            - name: Install rust toolchain
+              run: rustup toolchain install
+
+            - name: Install mold
+              run: sudo apt-get update && sudo apt-get install -y mold
+
+            - name: Install cargo tools
+              uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+              with:
+                  tool: cargo-make@0.37.24,cargo-generate@0.23.9
+
+            - name: Install kani
+              run: cargo install kani-verifier --version 0.64.0 --locked && cargo kani setup
+
+            - name: Select project directory
+              run: .github/select-project-dir.sh kani
+
+            - name: Cache
+              uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+              with:
+                  workspaces: ${{ env.PROJECT_DIR }}
+
+            - run: cargo make kani
+              working-directory: ${{ env.PROJECT_DIR }}
+
+    flux:
+        runs-on: ubuntu-24.04
+        env:
+            FIXPOINT_RELEASE: nightly
+            FIXPOINT_SHA256: 7f23b085b848d42ce91618c722cf867ca16e2b570d5d2427138ed80a99d80f9a
+        steps:
+            - name: Harden runner
+              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              with:
+                  egress-policy: block
+                  allowed-endpoints: >
+                      github.com:443 api.github.com:443 release-assets.githubusercontent.com:443
+                      objects.githubusercontent.com:443 results-receiver.actions.githubusercontent.com:443
+                      *.blob.core.windows.net:443 *.githubapp.com:443 static.rust-lang.org:443 index.crates.io:443
+                      static.crates.io:443 azure.archive.ubuntu.com:80 esm.ubuntu.com:443 motd.ubuntu.com:443
+                      packages.microsoft.com:443
+
+            - name: Checkout
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+
+            - name: Install rust toolchain
+              run: rustup toolchain install
+
+            - name: Install mold
+              run: sudo apt-get update && sudo apt-get install -y mold
+
+            - name: Install cargo tools
+              uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+              with:
+                  tool: cargo-make@0.37.24,cargo-generate@0.23.9
+
+            - name: Install z3
+              uses: cda-tum/setup-z3@4bc179e7fc1cd1a7f5f13429246c692041b19eb3 # v1.6.6
+              with:
+                  version: 4.15.3
+
+            - name: Install fixpoint
+              run: |
+                  archive="$RUNNER_TEMP/fixpoint.tar.gz"
+                  curl -fsSL --retry 3 -o "$archive" \
+                    "https://github.com/ucsd-progsys/liquid-fixpoint/releases/download/$FIXPOINT_RELEASE/fixpoint-x86_64-linux-gnu.tar.gz"
+                  echo "$FIXPOINT_SHA256  $archive" | sha256sum --check
+                  mkdir -p "$HOME/.local/bin"
+                  tar -xzf "$archive" -C "$HOME/.local/bin" fixpoint
+                  echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+            - name: Install flux
+              run: |
+                  flux_rev=$(grep -oP 'flux\.git", rev = "\K[0-9a-f]+' Cargo.toml)
+                  git clone --quiet https://github.com/flux-rs/flux.git "$RUNNER_TEMP/flux-src"
+                  git -C "$RUNNER_TEMP/flux-src" checkout --quiet "$flux_rev"
+                  (cd "$RUNNER_TEMP/flux-src" && cargo xtask install)
+
+            - name: Select project directory
+              run: .github/select-project-dir.sh flux
+
+            - name: Cache
+              uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+              with:
+                  workspaces: ${{ env.PROJECT_DIR }}
+
+            - run: cargo make flux
+              working-directory: ${{ env.PROJECT_DIR }}
+
+    commits:
+        runs-on: ubuntu-24.04
+        steps:
+            - name: Harden runner
+              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              with:
+                  egress-policy: block
+                  allowed-endpoints: >
+                      github.com:443 api.github.com:443 release-assets.githubusercontent.com:443
+                      objects.githubusercontent.com:443 results-receiver.actions.githubusercontent.com:443
+                      *.blob.core.windows.net:443 *.githubapp.com:443 pypi.org:443 files.pythonhosted.org:443
+                      ghcr.io:443 pkg-containers.githubusercontent.com:443
+
+            - name: Checkout
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            - name: Check conventional commits
+              env:
+                  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+                  HEAD_SHA: ${{ github.sha }}
+              run: |
+                  if ! git cat-file -e "$BASE_SHA^{commit}" 2> /dev/null; then
+                    echo "base $BASE_SHA is not in the history, skipping"
+                    exit 0
+                  fi
+                  pipx run commitizen==4.16.5 check --rev-range "$BASE_SHA..$HEAD_SHA"
+
+            - name: Scan for secrets
+              uses: trufflesecurity/trufflehog@31ce31ee1abbcc7dc8eee5764c17121c3044c8b2 # v3.99.7
+              with:
+                  extra_args: --results=verified,unknown
+
+    zizmor:
+        runs-on: ubuntu-24.04
+        steps:
+            - name: Harden runner
+              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              with:
+                  egress-policy: block
+                  allowed-endpoints: >
+                      github.com:443 api.github.com:443 release-assets.githubusercontent.com:443
+                      objects.githubusercontent.com:443 results-receiver.actions.githubusercontent.com:443
+                      *.blob.core.windows.net:443 *.githubapp.com:443 ghcr.io:443
+                      pkg-containers.githubusercontent.com:443
+
+            - name: Checkout
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+
+            - name: Audit workflows
+              uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+              with:
+                  advanced-security: false

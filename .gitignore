@@ -1,0 +1,8 @@
+.devenv*
+.direnv
+.pre-commit-config.yaml
+/target
+devenv.local.nix
+devenv.local.yaml
+/tests/fuzz/*/out
+/tests/fuzz/target

@@ -1,0 +1,7 @@
+error: an `Option` field takes no `default`: unset already means `None`
+ --> tests/ui/from_env_option_with_default.rs:1:10
+  |
+1 | #[derive(macros::FromEnv)]
+  |          ^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `macros::FromEnv` (in Nightly builds, run with -Z macro-backtrace for more info)

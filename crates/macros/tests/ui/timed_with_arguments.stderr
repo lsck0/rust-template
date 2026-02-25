@@ -1,0 +1,5 @@
+error: `#[timed]` takes no arguments
+ --> tests/ui/timed_with_arguments.rs:1:17
+  |
+1 | #[macros::timed(fast)]
+  |                 ^^^^

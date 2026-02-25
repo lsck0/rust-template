@@ -1,0 +1,70 @@
+name: Fuzz
+
+on:
+    schedule:
+        - cron: "0 4 * * *" # nightly
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    fuzz:
+        runs-on: ubuntu-24.04
+        env:
+            AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
+            AFL_NO_UI: "1"
+            AFL_SKIP_CPUFREQ: "1"
+        steps:
+            - name: Harden runner
+              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              with:
+                  egress-policy: block
+                  allowed-endpoints: >
+                      github.com:443 api.github.com:443 release-assets.githubusercontent.com:443
+                      objects.githubusercontent.com:443 results-receiver.actions.githubusercontent.com:443
+                      *.blob.core.windows.net:443 *.githubapp.com:443 static.rust-lang.org:443 index.crates.io:443
+                      static.crates.io:443 azure.archive.ubuntu.com:80 esm.ubuntu.com:443 motd.ubuntu.com:443
+                      packages.microsoft.com:443
+
+            - name: Checkout
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+
+            - name: Install rust toolchain
+              run: rustup toolchain install
+
+            - name: Install mold
+              run: sudo apt-get update && sudo apt-get install -y mold
+
+            - name: Install cargo tools
+              uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+              with:
+                  tool: cargo-make@0.37.24,cargo-generate@0.23.9
+
+            - name: Install nushell
+              uses: hustcer/setup-nu@eacad52a4634c4f8d17a94916f93be6856861b9c # v3.29
+              with:
+                  version: 0.115.1
+
+            - name: Install cargo-afl
+              run: cargo install cargo-afl --version 0.18.2 --locked
+
+            - name: Select project directory
+              run: .github/select-project-dir.sh fuzz
+
+            - name: Cache
+              uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+              with:
+                  workspaces: ${{ env.PROJECT_DIR }}/tests/fuzz
+
+            - run: cargo make fuzz
+              working-directory: ${{ env.PROJECT_DIR }}
+
+            - name: Upload minimized crashes
+              if: failure()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: fuzz-regressions
+                  path: ${{ env.PROJECT_DIR }}/tests/fuzz/*/regressions/
