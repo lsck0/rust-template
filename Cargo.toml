@@ -1,0 +1,123 @@
+[package]
+name = "{{project-name}}"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+build = "build/build.rs"
+
+[package.metadata]
+flux = { enabled = true, cache = true }
+
+[features]
+default = []
+fuzz = ["afl", "arbitrary"]
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "{{project-name}}"
+path = "src/bin/main.rs"
+test = false
+
+[[bench]]
+name = "bench"
+path = "benches/bench.rs"
+harness = false
+test = false
+
+[profile.release]
+codegen-units = 1
+debug = true
+lto = "fat"
+opt-level = 3
+panic = "abort"
+
+[profile.dev]
+debug = true
+lto = "off"
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.dependencies]
+macros = { path = "crates/macros" }
+
+afl = "=0.17.1"
+aliri_braid = "=0.4.0"
+anyhow = "=1.0.102"
+arbitrary = "=1.4.2"
+bitflags = "=2.11.0"
+chrono = { version = "=0.4.44", features = ["serde"] }
+criterion = { version = "=0.8.2", features = ["html_reports"] }
+darling = "=0.23.0"
+derive_more = { version = "=2.1.1", features = ["full"] }
+dotenvy = "=0.15.7"
+fake = { version = "=4.4.0", features = ["derive", "chrono", "uuid"] }
+flux-rs = { git = "https://github.com/flux-rs/flux.git" }
+itertools = "=0.14.0"
+kani = { git = "https://github.com/model-checking/kani" }
+lazy_static = "=1.5.0"
+mockall = "=0.14.0"
+pretty_assertions = "=1.4.1"
+proc-macro-crate = "=3.4.0"
+proc-macro2 = "=1.0.106"
+proptest = "=1.10.0"
+quote = "=1.0.44"
+rand = "=0.10.0"
+rand_core = "=0.10.0"
+rayon = "=1.11.0"
+rstest = "=0.26.1"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.149"
+strum = { version = "=0.28.0", features = ["derive", "strum_macros"] }
+strum_macros = "=0.28.0"
+syn = "=2.0.117"
+thiserror = "=2.0.18"
+tracing = "=0.1.44"
+tracing-subscriber = { version = "=0.3.22", features = ["env-filter", "json"] }
+
+[dev-dependencies]
+criterion.workspace = true
+fake.workspace = true
+mockall.workspace = true
+pretty_assertions.workspace = true
+proptest.workspace = true
+rstest.workspace = true
+
+[dependencies]
+afl = { workspace = true, optional = true }
+aliri_braid.workspace = true
+anyhow.workspace = true
+arbitrary = { workspace = true, optional = true }
+bitflags.workspace = true
+chrono.workspace = true
+derive_more.workspace = true
+dotenvy.workspace = true
+itertools.workspace = true
+lazy_static.workspace = true
+macros.workspace = true
+rand.workspace = true
+rand_core.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+strum.workspace = true
+strum_macros.workspace = true
+thiserror.workspace = true
+tracing-subscriber.workspace = true
+tracing.workspace = true
+
+[target.'cfg(kani_ra)'.dependencies]
+kani.workspace = true
+
+[target.'cfg(flux)'.dependencies]
+flux-rs.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(flux)'] }

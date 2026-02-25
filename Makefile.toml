@@ -1,0 +1,106 @@
+[env]
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
+
+[tasks.default]
+clear = true
+workspace = false
+alias = "run"
+
+[tasks.run]
+clear = true
+workspace = false
+command = "cargo"
+args = ["run"]
+
+[tasks.build]
+clear = true
+workspace = false
+command = "cargo"
+args = ["build", "--release"]
+
+[tasks.ci]
+clear = true
+workspace = false
+dependencies = [
+    "deny",
+    "audit",
+    "check",
+    "clippy",
+    "test",
+    "flux",
+    "kani",
+    "fuzz",
+]
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Internal
+# ---------------------------------------------------------------------------------------------------------------------
+
+[tasks.deny]
+clear = true
+workspace = false
+command = "cargo"
+args = [
+    "deny",
+    "check",
+    "--allow",
+    "unmatched-source",
+    "--allow",
+    "unlicensed",
+    "--allow",
+    "license-not-encountered",
+    "--allow",
+    "no-license-field",
+    "--allow",
+    "duplicate",
+]
+
+[tasks.audit]
+clear = true
+workspace = false
+command = "cargo"
+args = ["audit"]
+
+[tasks.check]
+clear = true
+workspace = false
+command = "cargo"
+args = ["check", "--workspace", "--all-features"]
+
+[tasks.clippy]
+clear = true
+workspace = false
+command = "cargo"
+args = [
+    "clippy",
+    "--workspace",
+    "--all-targets",
+    "--all-features",
+    "--",
+    "-D",
+    "warnings",
+]
+
+[tasks.test]
+clear = true
+workspace = false
+command = "cargo"
+args = ["test", "--workspace", "--all-features", "--", "--test-threads=8"]
+
+[tasks.flux]
+clear = true
+workspace = false
+command = "cargo"
+args = ["flux", "--workspace"]
+
+[tasks.kani]
+clear = true
+workspace = false
+command = "cargo"
+args = ["kani", "--workspace"]
+
+[tasks.fuzz]
+clear = true
+workspace = false
+cwd = "fuzz"
+command = "./run.sh"
